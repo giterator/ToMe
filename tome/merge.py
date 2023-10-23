@@ -47,15 +47,24 @@ def bipartite_soft_matching(
         return do_nothing, do_nothing
 
     with torch.no_grad():
+        torch.cuda.nvtx.range_push("Normalization")
         metric = metric / metric.norm(dim=-1, keepdim=True)
+        torch.cuda.nvtx.range_pop()
+
+        torch.cuda.nvtx.range_push("AssignTokensToSets")
         a, b = metric[..., ::2, :], metric[..., 1::2, :]
+        torch.cuda.nvtx.range_pop()
+
+        torch.cuda.nvtx.range_push("SimilarityScores")
         scores = a @ b.transpose(-1, -2)
+        torch.cuda.nvtx.range_pop()
 
         if class_token:
             scores[..., 0, :] = -math.inf
         if distill_token:
             scores[..., :, 0] = -math.inf
 
+        torch.cuda.nvtx.range_push("ChooseKeepTokens")
         node_max, node_idx = scores.max(dim=-1)
         edge_idx = node_max.argsort(dim=-1, descending=True)[..., None]
 
@@ -66,6 +75,7 @@ def bipartite_soft_matching(
         if class_token:
             # Sort to ensure the class token is at the start
             unm_idx = unm_idx.sort(dim=1)[0]
+        torch.cuda.nvtx.range_pop()
 
     def merge(x: torch.Tensor, mode="mean") -> torch.Tensor:
         src, dst = x[..., ::2, :], x[..., 1::2, :]
