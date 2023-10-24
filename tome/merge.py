@@ -65,29 +65,66 @@ def bipartite_soft_matching(
             scores[..., :, 0] = -math.inf
 
         torch.cuda.nvtx.range_push("ChooseKeepTokens")
+
+        torch.cuda.nvtx.range_push("torch.max()")
         node_max, node_idx = scores.max(dim=-1)
+        torch.cuda.nvtx.range_pop()
+
+        torch.cuda.nvtx.range_push("node_max.argsort()")
         edge_idx = node_max.argsort(dim=-1, descending=True)[..., None]
+        torch.cuda.nvtx.range_pop()
 
+        torch.cuda.nvtx.range_push("Unmerged_tokens_slice")
         unm_idx = edge_idx[..., r:, :]  # Unmerged Tokens
-        src_idx = edge_idx[..., :r, :]  # Merged Tokens
-        dst_idx = node_idx[..., None].gather(dim=-2, index=src_idx)
+        torch.cuda.nvtx.range_pop()
 
+        torch.cuda.nvtx.range_push("Merged_tokens_slice")
+        src_idx = edge_idx[..., :r, :]  # Merged Tokens
+        torch.cuda.nvtx.range_pop()
+
+        torch.cuda.nvtx.range_push("torch.gather()")
+        dst_idx = node_idx[..., None].gather(dim=-2, index=src_idx)
+        torch.cuda.nvtx.range_pop()
+
+        torch.cuda.nvtx.range_push("sort_unmerged_tokens")
         if class_token:
             # Sort to ensure the class token is at the start
+            #torch.cuda.nvtx.range_push("sort_unmerged_tokens")
             unm_idx = unm_idx.sort(dim=1)[0]
+            #torch.cuda.nvtx.range_pop()
+        torch.cuda.nvtx.range_pop()
+
         torch.cuda.nvtx.range_pop()
 
     def merge(x: torch.Tensor, mode="mean") -> torch.Tensor:
+        #torch.cuda.nvtx.range_push("merge")
         src, dst = x[..., ::2, :], x[..., 1::2, :]
         n, t1, c = src.shape
-        unm = src.gather(dim=-2, index=unm_idx.expand(n, t1 - r, c))
-        src = src.gather(dim=-2, index=src_idx.expand(n, r, c))
-        dst = dst.scatter_reduce(-2, dst_idx.expand(n, r, c), src, reduce=mode)
 
+        #torch.cuda.nvtx.range_push("torch.gather()")
+        unm = src.gather(dim=-2, index=unm_idx.expand(n, t1 - r, c))
+        #torch.cuda.nvtx.range_pop()
+
+        #torch.cuda.nvtx.range_push("torch.gather()")
+        src = src.gather(dim=-2, index=src_idx.expand(n, r, c))
+        #torch.cuda.nvtx.range_pop()
+
+        #torch.cuda.nvtx.range_push("torch.scatter_reduce()")
+        dst = dst.scatter_reduce(-2, dst_idx.expand(n, r, c), src, reduce=mode)
+        #torch.cuda.nvtx.range_pop()
+
+        #torch.cuda.nvtx.range_pop()
+
+        #torch.cuda.nvtx.range_push("concatenate")
         if distill_token:
+            #torch.cuda.nvtx.range_push("concatenate")
             return torch.cat([unm[:, :1], dst[:, :1], unm[:, 1:], dst[:, 1:]], dim=1)
+            #torch.cuda.nvtx.range_pop()
         else:
+            #torch.cuda.nvtx.range_push("concatenate")
             return torch.cat([unm, dst], dim=1)
+            #torch.cuda.nvtx.range_pop()
+        #torch.cuda.nvtx.range_pop()
 
     def unmerge(x: torch.Tensor) -> torch.Tensor:
         unm_len = unm_idx.shape[1]

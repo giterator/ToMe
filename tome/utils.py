@@ -61,6 +61,7 @@ def benchmark(
                     start = time.time()
 
                 model(input)
+                time.sleep(0.5)
                 total += batch_size
 
     if is_cuda:
