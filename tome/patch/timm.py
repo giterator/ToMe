@@ -13,8 +13,7 @@ from typing import Tuple
 
 import torch
 from timm.models.vision_transformer import Attention, Block, VisionTransformer
-import tlt.models.layers.Attention as tltAttention
-import tlt.models.layers.Block as tltBlock
+import tlt.models
 from tome.merge import bipartite_soft_matching, merge_source, merge_wavg
 from tome.utils import parse_r
 
@@ -149,8 +148,8 @@ def apply_patch(
         model._tome_info["distill_token"] = True
 
     for module in model.modules():
-        if isinstance(module, Block) or isinstance(module, tltBlock):
+        if isinstance(module, Block) or isinstance(module, tlt.models.layers.Block):
             module.__class__ = ToMeBlock
             module._tome_info = model._tome_info
-        elif isinstance(module, Attention) or isinstance(module, tltAttention):
+        elif isinstance(module, Attention) or isinstance(module, tlt.models.layers.Attention):
             module.__class__ = ToMeAttention
