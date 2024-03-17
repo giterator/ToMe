@@ -39,6 +39,8 @@ class ToMeBlock(Block):
 
         r = self._tome_info["r"].pop(0)
         if r > 0:
+            torch.cuda.nvtx.range_push("TokenMerging")
+
             # Apply ToMe here
             torch.cuda.nvtx.range_push("BipartiteSoftMatching")
             merge, _ = bipartite_soft_matching(
@@ -55,6 +57,8 @@ class ToMeBlock(Block):
                 )
             torch.cuda.nvtx.range_push("MergeTokens_ConcatSets")
             x, self._tome_info["size"] = merge_wavg(merge, x, self._tome_info["size"])
+            torch.cuda.nvtx.range_pop()
+
             torch.cuda.nvtx.range_pop()
 
         x = x + self._drop_path2(self.mlp(self.norm2(x)))
